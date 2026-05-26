@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Generated experiment outputs
+results/*
+!results/.gitkeep
+*.npz
+*.npy
+
+# Local secrets and environment
+.env
+.env.*
+!.env.example
