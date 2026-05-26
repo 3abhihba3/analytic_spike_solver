@@ -30,7 +30,15 @@ def compare_layer_with_brian2(
 
     if not brian2_available():
         return {"available": False, "skipped": True}
-    from brian2 import Network, NeuronGroup, SpikeGeneratorGroup, SpikeMonitor, Synapses, defaultclock, second
+    from brian2 import (
+        Network,
+        NeuronGroup,
+        SpikeGeneratorGroup,
+        SpikeMonitor,
+        Synapses,
+        defaultclock,
+        second,
+    )
 
     defaultclock.dt = dt * second
     events = input_spikes.sorted()
@@ -60,7 +68,9 @@ def compare_layer_with_brian2(
         t_stop=t_stop,
         controls=SolveControls(track_timing=False),
     )
-    brian_spikes = SpikeEvents(np.asarray(monitor.t / second), np.asarray(monitor.i, dtype=np.int64))
+    brian_spikes = SpikeEvents(
+        np.asarray(monitor.t / second), np.asarray(monitor.i, dtype=np.int64)
+    )
     return {
         "available": True,
         "skipped": False,

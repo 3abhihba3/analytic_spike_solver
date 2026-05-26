@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..core.solver import NetworkResult
-from ..generation.bias import generate_bias_times
 from ..core.events import SpikeEvents
-from ..core.solver import DenseLayer, SolveControls, _emit_counts
+from ..core.solver import DenseLayer, NetworkResult, SolveControls, _emit_counts
+from ..generation.bias import generate_bias_times
 
 
 def residual_growth(result: NetworkResult, weights_by_layer: list[np.ndarray]) -> list[np.ndarray]:
@@ -13,7 +12,7 @@ def residual_growth(result: NetworkResult, weights_by_layer: list[np.ndarray]) -
 
     residuals: list[np.ndarray] = []
     prev = None
-    for layer_result, weights in zip(result.layer_results, weights_by_layer):
+    for layer_result, weights in zip(result.layer_results, weights_by_layer, strict=True):
         local = layer_result.final_v
         if prev is None:
             eff = local.copy()
@@ -41,14 +40,14 @@ def residual_growth_timeseries(
     sample_times = np.asarray(sample_times, dtype=np.float64)
     local_residuals = []
     incoming = input_spikes
-    for layer, layer_result in zip(layers, result.layer_results):
+    for layer, layer_result in zip(layers, result.layer_results, strict=True):
         local = _layer_v_trace(incoming, layer, sample_times, controls)
         local_residuals.append(local)
         incoming = layer_result.spikes
 
     effective = []
     prev = None
-    for layer, local in zip(layers, local_residuals):
+    for layer, local in zip(layers, local_residuals, strict=True):
         if prev is None:
             eff = local.copy()
         else:
@@ -81,8 +80,12 @@ def _layer_v_trace(
     bias_idx = 0
     for s_idx, sample_t in enumerate(sample_times):
         while True:
-            next_event_t = float(events.times[event_idx]) if event_idx < len(events) else float("inf")
-            next_bias_t = float(bias_times[bias_idx]) if bias_idx < len(bias_times) else float("inf")
+            next_event_t = (
+                float(events.times[event_idx]) if event_idx < len(events) else float("inf")
+            )
+            next_bias_t = (
+                float(bias_times[bias_idx]) if bias_idx < len(bias_times) else float("inf")
+            )
             t = min(next_event_t, next_bias_t)
             if t > sample_t:
                 break

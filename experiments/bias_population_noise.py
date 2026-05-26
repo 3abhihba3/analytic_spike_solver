@@ -11,7 +11,6 @@ from analytic_spike_solver.generation.bias import (
     generate_bias_times,
 )
 
-
 OUT_DIR = Path(__file__).resolve().parents[1] / "results"
 DEFAULT_PATH = OUT_DIR / "bias_population_noise.csv"
 

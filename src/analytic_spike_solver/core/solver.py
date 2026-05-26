@@ -9,11 +9,10 @@ from typing import Literal
 import numpy as np
 
 from ..generation.bias import BiasSpikeConfig, bias_weight_for_target, generate_bias_times
-from .config import NetworkConfig, TauThetaConfig, WeightInitConfig
+from ..generation.weights import random_weights
+from .config import NetworkConfig
 from .events import SpikeEvents
 from .params import make_theta
-from ..generation.weights import random_weights
-
 
 ResetMode = Literal["subtractive", "zero"]
 ThresholdMode = Literal["strict", "inclusive"]
@@ -58,7 +57,9 @@ class DenseLayer:
             raise ValueError(f"{self.label}: theta values must be positive and finite")
         if self.delay < 0 or not np.isfinite(self.delay):
             raise ValueError(f"{self.label}: delay must be finite and non-negative")
-        self.bias_weight = _bias_weight(self.bias, self.tau, self.theta, self.bias_config, self.label)
+        self.bias_weight = _bias_weight(
+            self.bias, self.tau, self.theta, self.bias_config, self.label
+        )
 
     @property
     def label(self) -> str:
@@ -135,7 +136,10 @@ class DenseLayer:
             "tau": self.tau.tolist(),
             "theta": self.theta.tolist(),
             "bias": None if self.bias is None else np.asarray(self.bias).tolist(),
-            "bias_config": {"rate_hz": self.bias_config.rate_hz, "phase_s": self.bias_config.phase_s},
+            "bias_config": {
+                "rate_hz": self.bias_config.rate_hz,
+                "phase_s": self.bias_config.phase_s,
+            },
             "delay": self.delay,
         }
 
@@ -208,9 +212,7 @@ class NetworkResult:
     @classmethod
     def from_npz(cls, path: str | Path) -> NetworkResult:
         with np.load(path) as data:
-            layer_ids = sorted(
-                int(k.split("_")[1]) for k in data.files if k.endswith("_times")
-            )
+            layer_ids = sorted(int(k.split("_")[1]) for k in data.files if k.endswith("_times"))
             spikes = [
                 SpikeEvents(
                     data[f"layer_{i}_times"],
@@ -224,30 +226,50 @@ class NetworkResult:
                     s,
                     data[f"layer_{i}_final_v"],
                     0.0,
-                    np.bincount(s.ids).astype(np.int64) if len(s) else np.asarray([], dtype=np.int64),
+                    np.bincount(s.ids).astype(np.int64)
+                    if len(s)
+                    else np.asarray([], dtype=np.int64),
                     LayerStats(0, 0, 0, len(s), 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
                 )
-                for i, s in zip(layer_ids, spikes)
+                for i, s in zip(layer_ids, spikes, strict=True)
             ]
-            return cls(spikes, dummy_results, NetworkState([r.final_v for r in dummy_results]), float(data["runtime_s"][0]))
+            return cls(
+                spikes,
+                dummy_results,
+                NetworkState([r.final_v for r in dummy_results]),
+                float(data["runtime_s"][0]),
+            )
 
     def write_summary_csv(self, path: str | Path) -> None:
         rows = []
         for i, result in enumerate(self.layer_results):
             s = result.stats
-            rows.append([
-                i,
-                s.input_events,
-                s.bias_events,
-                s.total_events,
-                s.output_spikes,
-                s.expansion_ratio,
-                s.output_rate_hz,
-                s.runtime_s,
-            ])
+            rows.append(
+                [
+                    i,
+                    s.input_events,
+                    s.bias_events,
+                    s.total_events,
+                    s.output_spikes,
+                    s.expansion_ratio,
+                    s.output_rate_hz,
+                    s.runtime_s,
+                ]
+            )
         with Path(path).open("w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["layer", "input_events", "bias_events", "total_events", "output_spikes", "expansion_ratio", "output_rate_hz", "runtime_s"])
+            writer.writerow(
+                [
+                    "layer",
+                    "input_events",
+                    "bias_events",
+                    "total_events",
+                    "output_spikes",
+                    "expansion_ratio",
+                    "output_rate_hz",
+                    "runtime_s",
+                ]
+            )
             writer.writerows(rows)
 
 
@@ -271,7 +293,7 @@ class DenseNetwork:
     ) -> DenseNetwork:
         rng = np.random.default_rng(seed)
         layers = []
-        for i, (n_pre, n_post) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
+        for i, (n_pre, n_post) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:], strict=True)):
             layers.append(
                 DenseLayer.random(
                     n_pre,
@@ -291,7 +313,9 @@ class DenseNetwork:
     def from_config(cls, config: NetworkConfig) -> DenseNetwork:
         rng = np.random.default_rng(config.seed)
         layers = []
-        for i, (n_pre, n_post) in enumerate(zip(config.layer_sizes[:-1], config.layer_sizes[1:])):
+        for i, (n_pre, n_post) in enumerate(
+            zip(config.layer_sizes[:-1], config.layer_sizes[1:], strict=True)
+        ):
             tt = config.tau_theta
             wi = config.weight_init
             layers.append(
@@ -343,7 +367,9 @@ def solve_network(
         initial_states = state.layer_v
         t_start = state.state_time
     if initial_states is not None and len(initial_states) != len(layers):
-        raise ValueError(f"initial_states length {len(initial_states)} must match layers {len(layers)}")
+        raise ValueError(
+            f"initial_states length {len(initial_states)} must match layers {len(layers)}"
+        )
     current = input_spikes
     layer_results: list[LayerResult] = []
     spikes_by_layer: list[SpikeEvents] = []
@@ -368,7 +394,12 @@ def solve_network(
         spikes_by_layer.append(current)
         final_vs.append(result.final_v)
     runtime = time.perf_counter() - start
-    return NetworkResult(spikes_by_layer, layer_results, NetworkState(final_vs, t_stop if t_stop is not None else t_start), runtime)
+    return NetworkResult(
+        spikes_by_layer,
+        layer_results,
+        NetworkState(final_vs, t_stop if t_stop is not None else t_start),
+        runtime,
+    )
 
 
 def solve_layer(
@@ -410,7 +441,9 @@ def solve_layer(
     total_emitted = 0
 
     while dynamic_idx < len(dynamic) or bias_idx < len(bias_times):
-        next_dynamic_t = float(dynamic.times[dynamic_idx]) if dynamic_idx < len(dynamic) else float("inf")
+        next_dynamic_t = (
+            float(dynamic.times[dynamic_idx]) if dynamic_idx < len(dynamic) else float("inf")
+        )
         next_bias_t = float(bias_times[bias_idx]) if bias_idx < len(bias_times) else float("inf")
         t = min(next_dynamic_t, next_bias_t)
         if t > current_time:
@@ -438,18 +471,30 @@ def solve_layer(
         emitted = _emit_counts(v, layer.theta, threshold_eps, controls.threshold_mode)
         if controls.refractory_s > 0:
             emitted[current_time < refractory_until] = 0
-        if controls.max_spikes_per_event is not None and int(emitted.sum()) > controls.max_spikes_per_event:
+        if (
+            controls.max_spikes_per_event is not None
+            and int(emitted.sum()) > controls.max_spikes_per_event
+        ):
             raise RuntimeError(f"{label}: max_spikes_per_event exceeded at t={current_time}")
-        if controls.max_spikes_per_neuron is not None and np.any(spike_counts + emitted > controls.max_spikes_per_neuron):
+        if controls.max_spikes_per_neuron is not None and np.any(
+            spike_counts + emitted > controls.max_spikes_per_neuron
+        ):
             raise RuntimeError(f"{label}: max_spikes_per_neuron exceeded")
-        if controls.max_total_spikes is not None and total_emitted + int(emitted.sum()) > controls.max_total_spikes:
+        if (
+            controls.max_total_spikes is not None
+            and total_emitted + int(emitted.sum()) > controls.max_total_spikes
+        ):
             raise RuntimeError(f"{label}: max_total_spikes exceeded")
         if np.any(emitted):
             active_event_times += 1
-            max_spikes_per_neuron_at_event = max(max_spikes_per_neuron_at_event, int(np.max(emitted)))
+            max_spikes_per_neuron_at_event = max(
+                max_spikes_per_neuron_at_event, int(np.max(emitted))
+            )
             active_ids = np.flatnonzero(emitted)
             repeated_ids = np.repeat(active_ids, emitted[active_ids])
-            out_times.append(np.full(repeated_ids.shape, current_time + layer.delay, dtype=np.float64))
+            out_times.append(
+                np.full(repeated_ids.shape, current_time + layer.delay, dtype=np.float64)
+            )
             out_ids.append(repeated_ids.astype(np.int64, copy=False))
             spike_counts += emitted
             total_emitted += int(emitted.sum())
@@ -489,7 +534,9 @@ def solve_layer(
     return LayerResult(output_spikes, v, state_time, spike_counts, stats)
 
 
-def solve_batch(input_batches: list[SpikeEvents], network: DenseNetwork | list[DenseLayer], **kwargs) -> list[NetworkResult]:
+def solve_batch(
+    input_batches: list[SpikeEvents], network: DenseNetwork | list[DenseLayer], **kwargs
+) -> list[NetworkResult]:
     layers = network.layers if isinstance(network, DenseNetwork) else network
     return [solve_network(events, layers, **kwargs) for events in input_batches]
 
@@ -532,7 +579,9 @@ def _bias_weight(
     return weight
 
 
-def _emit_counts(v: np.ndarray, theta: np.ndarray, eps: float, threshold_mode: ThresholdMode) -> np.ndarray:
+def _emit_counts(
+    v: np.ndarray, theta: np.ndarray, eps: float, threshold_mode: ThresholdMode
+) -> np.ndarray:
     threshold = theta / 2.0
     if threshold_mode == "strict":
         active = v > threshold + eps

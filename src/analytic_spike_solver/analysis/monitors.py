@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..core.events import SpikeEvents
 from ..analysis.metrics import firing_rates, spike_counts
+from ..core.events import SpikeEvents
 
 
 @dataclass

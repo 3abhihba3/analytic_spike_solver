@@ -21,7 +21,12 @@ from .analysis.residual import residual_growth, residual_growth_timeseries
 from .analysis.trace import decode_trace, lowpass_values
 from .core.config import LayerConfig, NetworkConfig, TauThetaConfig, WeightInitConfig
 from .core.events import SpikeEvents
-from .core.params import constant_theta, make_theta, theta_for_target_gain, theta_proportional_to_tau
+from .core.params import (
+    constant_theta,
+    make_theta,
+    theta_for_target_gain,
+    theta_proportional_to_tau,
+)
 from .core.solver import (
     DenseLayer,
     DenseNetwork,
@@ -57,7 +62,11 @@ from .generation.weights import (
     random_weights,
     rescale_incoming,
 )
-from .integrations.brian_compare import brian2_available, compare_layer_with_brian2, compare_with_brian2
+from .integrations.brian_compare import (
+    brian2_available,
+    compare_layer_with_brian2,
+    compare_with_brian2,
+)
 from .integrations.numba_accel import numba_available
 from .tools.parallel import solve_batch_parallel
 from .tools.reference import timestep_solve_layer

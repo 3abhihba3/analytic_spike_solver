@@ -16,3 +16,24 @@ from .solver import (
     solve_network,
 )
 
+__all__ = [
+    "DenseLayer",
+    "DenseNetwork",
+    "LayerConfig",
+    "LayerResult",
+    "LayerStats",
+    "NetworkConfig",
+    "NetworkResult",
+    "NetworkState",
+    "SolveControls",
+    "SpikeEvents",
+    "TauThetaConfig",
+    "WeightInitConfig",
+    "constant_theta",
+    "make_theta",
+    "solve_batch",
+    "solve_layer",
+    "solve_network",
+    "theta_for_target_gain",
+    "theta_proportional_to_tau",
+]

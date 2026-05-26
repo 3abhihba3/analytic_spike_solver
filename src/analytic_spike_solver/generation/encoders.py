@@ -115,7 +115,9 @@ def from_rate_function(
     return SpikeEvents(times, ids)
 
 
-def current_to_spikes(currents: np.ndarray, sample_times: np.ndarray, *, gain_hz: float, seed=None) -> SpikeEvents:
+def current_to_spikes(
+    currents: np.ndarray, sample_times: np.ndarray, *, gain_hz: float, seed=None
+) -> SpikeEvents:
     currents = np.asarray(currents, dtype=np.float64)
     sample_times = np.asarray(sample_times, dtype=np.float64)
     dt = float(np.median(np.diff(sample_times)))

@@ -6,7 +6,6 @@ import numpy as np
 
 from ..core.random import rng_from_seed
 
-
 WeightInit = Literal[
     "positive_mean",
     "he_signed",

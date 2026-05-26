@@ -99,7 +99,9 @@ def effective_rank(values: np.ndarray) -> float:
     return float(np.exp(-np.sum(probs * np.log(probs))))
 
 
-def locking_metrics(pre: SpikeEvents, post: SpikeEvents, *, window: float, duration: float) -> dict[str, float]:
+def locking_metrics(
+    pre: SpikeEvents, post: SpikeEvents, *, window: float, duration: float
+) -> dict[str, float]:
     pre_t = np.sort(pre.times)
     post_t = np.sort(post.times)
     if len(pre_t) == 0 or len(post_t) == 0:
@@ -109,9 +111,13 @@ def locking_metrics(pre: SpikeEvents, post: SpikeEvents, *, window: float, durat
             "post_after_pre_ratio": float("nan"),
             "frac_post_preceded": float("nan"),
         }
-    counts = np.searchsorted(post_t, pre_t + window, side="right") - np.searchsorted(post_t, pre_t, side="left")
+    counts = np.searchsorted(post_t, pre_t + window, side="right") - np.searchsorted(
+        post_t, pre_t, side="left"
+    )
     expected = len(post_t) / max(duration, 1e-12) * window
-    pre_before = np.searchsorted(pre_t, post_t, side="left") - np.searchsorted(pre_t, post_t - window, side="left")
+    pre_before = np.searchsorted(pre_t, post_t, side="left") - np.searchsorted(
+        pre_t, post_t - window, side="left"
+    )
     return {
         "mean_post_after_pre": float(np.mean(counts)),
         "expected_post_after_pre": float(expected),

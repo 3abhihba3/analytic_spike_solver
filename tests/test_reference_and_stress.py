@@ -4,17 +4,19 @@ import unittest
 
 import numpy as np
 
-from analytic_spike_solver.tools.reference import timestep_solve_layer
+from analytic_spike_solver import DenseLayer, SpikeEvents, compare_layer_with_brian2
 from analytic_spike_solver.analysis.residual import residual_growth_timeseries
 from analytic_spike_solver.integrations.sparse import SparseLayerSpec
+from analytic_spike_solver.tools.reference import timestep_solve_layer
 from analytic_spike_solver.tools.stress import stress_run
-from analytic_spike_solver import DenseLayer, SpikeEvents, compare_layer_with_brian2
 
 
 class ReferenceAndStressTests(unittest.TestCase):
     def test_timestep_reference_smoke(self):
         layer = DenseLayer(weights=np.asarray([[0.6]]), tau=0.01, theta=1.0)
-        out = timestep_solve_layer(SpikeEvents([0.0], [0]), layer, dt=0.001, t_start=0.0, t_stop=0.01)
+        out = timestep_solve_layer(
+            SpikeEvents([0.0], [0]), layer, dt=0.001, t_start=0.0, t_stop=0.01
+        )
         self.assertGreaterEqual(len(out), 1)
 
     def test_sparse_spec_from_dense(self):

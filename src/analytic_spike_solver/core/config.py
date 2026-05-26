@@ -5,7 +5,6 @@ from typing import Literal
 
 from ..generation.bias import BiasSpikeConfig
 
-
 ThetaPolicy = Literal["constant", "proportional_tau", "target_gain"]
 
 

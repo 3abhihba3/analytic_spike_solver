@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..generation.encoders import poisson_events
 from ..core.solver import DenseNetwork, SolveControls
+from ..generation.encoders import poisson_events
 
 
 def stress_run(*, n: int = 512, depth: int = 3, duration: float = 0.2, rate_hz: float = 20.0):
