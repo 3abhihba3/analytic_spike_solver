@@ -5,8 +5,7 @@ CPU event-streaming solver for dense feedforward spiking networks.
 ## Status
 
 This is a private, proprietary research package. The public API is still
-experimental; compatibility shims such as `analytic_spike_solver.solver` remain
-available, but new code should prefer top-level imports or grouped subpackages.
+experimental; new code should prefer top-level imports or grouped subpackages.
 
 The implemented model is:
 
@@ -156,4 +155,3 @@ analytic-spike-solver benchmark path/to/output.csv
 - `examples/`: small executable examples.
 - `experiments/`: reproducible experiment scripts; generated outputs are written to `results/` and ignored by git.
 - `tests/`: pytest/unittest regression coverage.
-- Root-level modules such as `analytic_spike_solver.solver` are compatibility shims; new code should prefer the grouped subpackages or top-level public imports from `analytic_spike_solver`.

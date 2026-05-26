@@ -4,6 +4,21 @@ import numpy as np
 
 from ..core.events import SpikeEvents
 
+__all__ = [
+    "corrcoef",
+    "covariance_similarity",
+    "cv",
+    "effective_rank",
+    "firing_rates",
+    "locking_metrics",
+    "mae_error",
+    "offdiag_mean_corr",
+    "rms_error",
+    "spike_counts",
+    "target_comparison",
+    "trace_summary",
+]
+
 
 def spike_counts(spikes: SpikeEvents, n_neurons: int) -> np.ndarray:
     return np.bincount(spikes.ids, minlength=n_neurons).astype(np.int64)
