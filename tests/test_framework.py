@@ -7,9 +7,13 @@ from pathlib import Path
 import numpy as np
 
 from analytic_spike_solver import (
+    Dense,
     DenseLayer,
     DenseNetwork,
+    LayerResult,
+    LayerStats,
     NetworkConfig,
+    Sequential,
     SolveControls,
     SpikeEvents,
     TauThetaConfig,
@@ -28,6 +32,77 @@ from analytic_spike_solver import (
 
 
 class FrameworkFeatureTests(unittest.TestCase):
+    def test_sequential_add_call_predict_and_custom_layer(self):
+        class PassThroughLayer:
+            name = "passthrough"
+            input_size = 2
+            output_size = 2
+
+            @property
+            def label(self):
+                return self.name
+
+            def initial_state(self):
+                return np.asarray([], dtype=np.float64)
+
+            def forward(
+                self,
+                input_spikes,
+                *,
+                t_start=0.0,
+                t_stop=None,
+                initial_state=None,
+                threshold_eps=1e-12,
+                controls=None,
+                layer_index=None,
+            ):
+                clipped = input_spikes.clipped(t_start, t_stop).sorted()
+                stats = LayerStats(
+                    input_events=len(clipped),
+                    bias_events=0,
+                    total_events=len(clipped),
+                    output_spikes=len(clipped),
+                    active_event_times=len(np.unique(clipped.times)) if len(clipped) else 0,
+                    max_spikes_per_neuron_at_event=0,
+                    max_spikes_per_neuron_total=0,
+                    final_v_mean=0.0,
+                    final_v_max=0.0,
+                    output_rate_hz=0.0,
+                    mean_spikes_per_neuron=0.0,
+                    active_neuron_fraction=0.0,
+                    expansion_ratio=1.0,
+                    runtime_s=0.0,
+                )
+                return LayerResult(
+                    clipped,
+                    np.asarray([], dtype=np.float64),
+                    t_stop if t_stop is not None else t_start,
+                    np.asarray([], dtype=np.int64),
+                    stats,
+                )
+
+            def to_dict(self):
+                return {"name": self.name, "type": "PassThroughLayer"}
+
+        model = Sequential(name="ffn")
+        model.add(PassThroughLayer())
+        model.add(Dense(1, input_size=2, weights=np.asarray([[0.6], [0.0]]), name="out"))
+
+        events = SpikeEvents([0.0], [0])
+        called = model(events, t_stop=0.01)
+        predicted = model.predict(events, t_stop=0.01)
+
+        self.assertEqual(len(called.spikes_by_layer), 2)
+        np.testing.assert_allclose(called.output.times, [0.0])
+        np.testing.assert_allclose(called.outputs.times, [0.0])
+        np.testing.assert_allclose(predicted.output.times, [0.0])
+        self.assertEqual(model.summary()[1]["type"], "Dense")
+
+    def test_sequential_validates_adjacent_layer_sizes(self):
+        model = Sequential([Dense(3, input_size=2)])
+        with self.assertRaises(ValueError):
+            model.add(Dense(1, input_size=4))
+
     def test_random_layer_and_network_are_reproducible(self):
         a = DenseLayer.random(4, 3, seed=12)
         b = DenseLayer.random(4, 3, seed=12)

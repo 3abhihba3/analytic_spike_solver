@@ -28,12 +28,15 @@ from .core.params import (
     theta_proportional_to_tau,
 )
 from .core.solver import (
+    Dense,
     DenseLayer,
     DenseNetwork,
+    Layer,
     LayerResult,
     LayerStats,
     NetworkResult,
     NetworkState,
+    Sequential,
     SolveControls,
     solve_batch,
     solve_layer,
@@ -73,8 +76,10 @@ from .tools.reference import timestep_solve_layer
 
 __all__ = [
     "BiasSpikeConfig",
+    "Dense",
     "DenseLayer",
     "DenseNetwork",
+    "Layer",
     "LayerConfig",
     "LayerResult",
     "LayerStats",
@@ -82,6 +87,7 @@ __all__ = [
     "NetworkResult",
     "NetworkState",
     "PopulationRateMonitor",
+    "Sequential",
     "SolveControls",
     "SpikeEvents",
     "SpikeMonitor",

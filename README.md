@@ -97,19 +97,38 @@ python -m pip install -e ".[dev]"
 ```python
 import numpy as np
 
-from analytic_spike_solver import DenseLayer, SpikeEvents, solve_layer
+from analytic_spike_solver import Dense, Sequential, SpikeEvents
 
-events = SpikeEvents(times=[0.01, 0.02], ids=[0, 1])
-layer = DenseLayer(
-    weights=np.asarray([[0.35, 0.10], [0.30, 0.55]]),
-    tau=0.020,
-    theta=1.0,
-    bias=[0.05, 0.08],
+model = Sequential(
+    [
+        Dense(
+            2,
+            input_size=2,
+            weights=np.asarray([[0.35, 0.10], [0.30, 0.55]]),
+            tau=0.020,
+            theta=1.0,
+            bias=[0.05, 0.08],
+        )
+    ]
 )
 
-result = solve_layer(events, layer, t_start=0.0, t_stop=0.05)
-print(result.spikes.times, result.spikes.ids)
+events = SpikeEvents(times=[0.01, 0.02], ids=[0, 1])
+result = model(events, t_start=0.0, t_stop=0.05)
+print(result.output.times, result.output.ids)
 ```
+
+`Sequential` follows the usual deep-learning container pattern:
+
+```python
+from analytic_spike_solver import Dense, Sequential
+
+model = Sequential(name="ffn")
+model.add(Dense(12, input_size=8, bias=0.05, name="hidden"))
+model.add(Dense(4, input_size=12, name="output"))
+```
+
+Custom layers can join the same model as long as they implement the layer
+protocol: `label`, `initial_state()`, `forward(...)`, and `to_dict()`.
 
 ## Development
 
@@ -134,12 +153,14 @@ analytic-spike-solver benchmark path/to/output.csv
 
 ## Experiment Features
 
+- Sequential model construction with `Sequential.add(...)` and framework-style
+  `Dense(...)` layers.
 - Random `DenseLayer.random(...)` and `DenseNetwork.random(...)` constructors.
 - Weight initializers: `positive_mean`, `he_signed`, `he_signed_centered`,
   `he_signed_centered_safe`, `he_abs_rescaled`.
 - Spike generators for Poisson, regular, jittered regular, bursts, rate
   functions, and continuous-current encoding.
-- `DenseNetwork`, `NetworkState`, `SolveControls`, and `NetworkResult`
+- `Sequential`, `DenseNetwork`, `NetworkState`, `SolveControls`, and `NetworkResult`
   support reusable networks, continuation, safety limits, reset/threshold
   modes, delays, refractory windows, timings, and serialization.
 - Trace decoding, metrics, monitors, residual tracking, plotting helpers,

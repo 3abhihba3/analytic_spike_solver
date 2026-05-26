@@ -4,7 +4,7 @@ import csv
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -16,6 +16,32 @@ from .params import make_theta
 
 ResetMode = Literal["subtractive", "zero"]
 ThresholdMode = Literal["strict", "inclusive"]
+
+
+@runtime_checkable
+class Layer(Protocol):
+    """Layer interface used by Sequential models."""
+
+    name: str
+
+    @property
+    def label(self) -> str: ...
+
+    def initial_state(self) -> Any: ...
+
+    def forward(
+        self,
+        input_spikes: SpikeEvents,
+        *,
+        t_start: float = 0.0,
+        t_stop: float | None = None,
+        initial_state: Any = None,
+        threshold_eps: float = 1e-12,
+        controls: SolveControls | None = None,
+        layer_index: int | None = None,
+    ) -> LayerResult: ...
+
+    def to_dict(self) -> dict: ...
 
 
 @dataclass
@@ -70,12 +96,49 @@ class DenseLayer:
         return int(self.weights.shape[0])
 
     @property
+    def input_size(self) -> int:
+        return self.n_input
+
+    @property
     def n_post(self) -> int:
         return int(self.weights.shape[1])
 
     @property
+    def output_size(self) -> int:
+        return self.n_post
+
+    @property
+    def units(self) -> int:
+        return self.n_post
+
+    @property
     def has_bias(self) -> bool:
         return self.bias_weight is not None and bool(np.any(self.bias_weight != 0.0))
+
+    def initial_state(self) -> np.ndarray:
+        return np.zeros(self.n_post, dtype=np.float64)
+
+    def forward(
+        self,
+        input_spikes: SpikeEvents,
+        *,
+        t_start: float = 0.0,
+        t_stop: float | None = None,
+        initial_state: np.ndarray | None = None,
+        threshold_eps: float = 1e-12,
+        controls: SolveControls | None = None,
+        layer_index: int | None = None,
+    ) -> LayerResult:
+        return solve_layer(
+            input_spikes,
+            self,
+            t_start=t_start,
+            t_stop=t_stop,
+            initial_v=initial_state,
+            threshold_eps=threshold_eps,
+            controls=controls,
+            layer_index=layer_index,
+        )
 
     @classmethod
     def random(
@@ -144,6 +207,97 @@ class DenseLayer:
         }
 
 
+class Dense(DenseLayer):
+    """Framework-style dense layer.
+
+    `Dense` is the user-facing layer constructor for Sequential models. Pass
+    `input_size` to initialize random weights, or pass explicit `weights` for a
+    fully specified layer.
+    """
+
+    def __init__(
+        self,
+        units: int,
+        *,
+        input_size: int | None = None,
+        weights: np.ndarray | None = None,
+        tau: np.ndarray | float = 0.02,
+        theta: np.ndarray | float = 1.0,
+        theta_policy: str = "constant",
+        theta_per_tau: float | None = None,
+        target_gain: float | None = None,
+        weight_init: str = "he_signed_centered_safe",
+        gain: float = 1.0,
+        jitter: float = 0.6,
+        max_abs_weight: float | None = None,
+        bias: np.ndarray | float | None = None,
+        bias_config: BiasSpikeConfig | None = None,
+        delay: float = 0.0,
+        seed: int | np.random.Generator | None = None,
+        name: str = "",
+    ) -> None:
+        if units <= 0:
+            raise ValueError("units must be positive")
+        if weights is None:
+            if input_size is None:
+                raise ValueError("input_size is required when weights are not provided")
+            weights = random_weights(
+                input_size,
+                units,
+                mode=weight_init,
+                gain=gain,
+                jitter=jitter,
+                max_abs_weight=max_abs_weight,
+                seed=seed,
+            )
+        else:
+            weights = np.asarray(weights, dtype=np.float64)
+            if weights.ndim != 2:
+                raise ValueError(f"weights must be 2D, got {weights.shape}")
+            if weights.shape[1] != units:
+                raise ValueError(
+                    f"units {units} must match weights output dimension {weights.shape[1]}"
+                )
+            if input_size is not None and weights.shape[0] != input_size:
+                raise ValueError(
+                    f"input_size {input_size} must match weights input dimension {weights.shape[0]}"
+                )
+
+        tau_arr = np.asarray(tau, dtype=np.float64)
+        tau_value: np.ndarray | float = float(tau_arr) if tau_arr.ndim == 0 else tau_arr
+        theta_value = make_theta(
+            tau_value,
+            base_theta=theta,
+            policy=theta_policy,
+            theta_per_tau=theta_per_tau,
+            target_gain=target_gain,
+        )
+        super().__init__(
+            weights=weights,
+            tau=tau_value,
+            theta=theta_value,
+            bias=bias,
+            bias_config=bias_config or BiasSpikeConfig(),
+            delay=delay,
+            name=name,
+        )
+
+    @property
+    def label(self) -> str:
+        return self.name or "Dense"
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update(
+            {
+                "type": "Dense",
+                "input_size": self.input_size,
+                "units": self.units,
+            }
+        )
+        return data
+
+
 @dataclass
 class LayerStats:
     input_events: int
@@ -170,15 +324,19 @@ class LayerResult:
     spike_counts: np.ndarray
     stats: LayerStats
 
+    @property
+    def output(self) -> SpikeEvents:
+        return self.spikes
+
 
 @dataclass
 class NetworkState:
-    layer_v: list[np.ndarray]
+    layer_v: list[Any]
     state_time: float = 0.0
 
     @classmethod
-    def zeros(cls, layers: list[DenseLayer], state_time: float = 0.0) -> NetworkState:
-        return cls([np.zeros(layer.n_post, dtype=np.float64) for layer in layers], state_time)
+    def zeros(cls, layers: list[Layer], state_time: float = 0.0) -> NetworkState:
+        return cls([layer.initial_state() for layer in layers], state_time)
 
     def to_npz(self, path: str | Path) -> None:
         data = {"state_time": np.asarray([self.state_time])}
@@ -199,6 +357,16 @@ class NetworkResult:
     layer_results: list[LayerResult]
     final_state: NetworkState
     runtime_s: float = 0.0
+
+    @property
+    def output(self) -> SpikeEvents:
+        if not self.spikes_by_layer:
+            return SpikeEvents.empty_events()
+        return self.spikes_by_layer[-1]
+
+    @property
+    def outputs(self) -> SpikeEvents:
+        return self.output
 
     def to_npz(self, path: str | Path) -> None:
         data = {"runtime_s": np.asarray([self.runtime_s])}
@@ -274,9 +442,30 @@ class NetworkResult:
 
 
 @dataclass
-class DenseNetwork:
-    layers: list[DenseLayer]
+class Sequential:
+    layers: list[Layer] = field(default_factory=list)
     name: str = ""
+
+    def __init__(self, layers: list[Layer] | None = None, name: str = "") -> None:
+        self.layers = []
+        self.name = name
+        for layer in layers or []:
+            self.add(layer)
+
+    def add(self, layer: Layer) -> None:
+        if not isinstance(layer, Layer):
+            missing = "forward(), initial_state(), label, and to_dict()"
+            raise TypeError(f"layer must implement the Layer protocol: {missing}")
+        if self.layers:
+            previous_output = getattr(self.layers[-1], "output_size", None)
+            next_input = getattr(layer, "input_size", None)
+            if previous_output is not None and next_input is not None:
+                if int(previous_output) != int(next_input):
+                    raise ValueError(
+                        f"cannot add {layer.label}: input_size {next_input} does not "
+                        f"match previous output_size {previous_output}"
+                    )
+        self.layers.append(layer)
 
     @classmethod
     def random(
@@ -290,18 +479,18 @@ class DenseNetwork:
         bias: float | None = None,
         seed: int | None = None,
         name: str = "",
-    ) -> DenseNetwork:
+    ) -> Sequential:
         rng = np.random.default_rng(seed)
         layers = []
         for i, (n_pre, n_post) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:], strict=True)):
             layers.append(
-                DenseLayer.random(
-                    n_pre,
+                Dense(
                     n_post,
-                    tau=tau,
-                    theta=theta,
+                    input_size=n_pre,
                     weight_init=weight_init,
                     gain=gain,
+                    tau=tau,
+                    theta=theta,
                     bias=bias,
                     seed=rng,
                     name=f"L{i}",
@@ -310,7 +499,7 @@ class DenseNetwork:
         return cls(layers=layers, name=name)
 
     @classmethod
-    def from_config(cls, config: NetworkConfig) -> DenseNetwork:
+    def from_config(cls, config: NetworkConfig) -> Sequential:
         rng = np.random.default_rng(config.seed)
         layers = []
         for i, (n_pre, n_post) in enumerate(
@@ -319,9 +508,9 @@ class DenseNetwork:
             tt = config.tau_theta
             wi = config.weight_init
             layers.append(
-                DenseLayer.random(
-                    n_pre,
+                Dense(
                     n_post,
+                    input_size=n_pre,
                     tau=tt.tau,
                     theta=tt.theta,
                     theta_policy=tt.theta_policy,
@@ -342,16 +531,38 @@ class DenseNetwork:
     def solve(self, input_spikes: SpikeEvents, **kwargs) -> NetworkResult:
         return solve_network(input_spikes, self.layers, **kwargs)
 
+    def __call__(self, input_spikes: SpikeEvents, **kwargs) -> NetworkResult:
+        return self.solve(input_spikes, **kwargs)
+
+    def predict(self, input_spikes: SpikeEvents, **kwargs) -> NetworkResult:
+        return self.solve(input_spikes, **kwargs)
+
     def initial_state(self, state_time: float = 0.0) -> NetworkState:
         return NetworkState.zeros(self.layers, state_time)
 
     def to_dict(self) -> dict:
         return {"name": self.name, "layers": [layer.to_dict() for layer in self.layers]}
 
+    def summary(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "index": i,
+                "name": layer.label,
+                "type": type(layer).__name__,
+                "input_size": getattr(layer, "input_size", None),
+                "output_size": getattr(layer, "output_size", None),
+            }
+            for i, layer in enumerate(self.layers)
+        ]
+
+
+class DenseNetwork(Sequential):
+    """Backward-compatible name for Sequential dense feedforward models."""
+
 
 def solve_network(
     input_spikes: SpikeEvents,
-    layers: list[DenseLayer],
+    layers: list[Layer],
     *,
     t_start: float = 0.0,
     t_stop: float | None = None,
@@ -379,12 +590,11 @@ def solve_network(
             layer_t_start, layer_t_stop = t_start, t_stop
         else:
             layer_t_start, layer_t_stop = layer_windows[layer_idx]
-        result = solve_layer(
+        result = layer.forward(
             current,
-            layer,
             t_start=layer_t_start,
             t_stop=layer_t_stop,
-            initial_v=None if initial_states is None else initial_states[layer_idx],
+            initial_state=None if initial_states is None else initial_states[layer_idx],
             threshold_eps=threshold_eps,
             controls=controls,
             layer_index=layer_idx,
@@ -535,9 +745,9 @@ def solve_layer(
 
 
 def solve_batch(
-    input_batches: list[SpikeEvents], network: DenseNetwork | list[DenseLayer], **kwargs
+    input_batches: list[SpikeEvents], network: Sequential | list[Layer], **kwargs
 ) -> list[NetworkResult]:
-    layers = network.layers if isinstance(network, DenseNetwork) else network
+    layers = network.layers if isinstance(network, Sequential) else network
     return [solve_network(events, layers, **kwargs) for events in input_batches]
 
 
